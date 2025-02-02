@@ -2,8 +2,10 @@ const std = @import("std");
 const net = std.net;
 const posix = std.posix;
 
+const Reader = @import("./reader.zig").Reader;
+
 // The message header contains the byte length of the message data.
-const MESSAGE_HEADER_LEN = 4;
+pub const MESSAGE_HEADER_LEN = 4;
 
 pub fn main() !void {
     const address = try net.Address.parseIp("127.0.0.1", 4000);
@@ -77,13 +79,11 @@ pub fn main() !void {
             std.debug.print("Failed reading incoming data : {}\n", .{err});
             continue;
         };
-        if (bytes_read == 0) {
+        if (bytes_read == 0)
             continue;
-        }
 
-        write_message(connection, &incoming_data) catch |err| {
+        write_message(connection, &incoming_data) catch |err|
             std.debug.print("Failed writing to connection file : {}\n", .{err});
-        };
     }
 }
 
@@ -104,9 +104,8 @@ fn read_message(connection: posix.socket_t, data: []const u8) !u32 {
     try read(connection, &message_header);
 
     const data_size = std.mem.readInt(u32, &message_header, .little);
-    if (data_size > data.len) {
+    if (data_size > data.len)
         return error.BufferTooSmall;
-    }
 
     try read(connection, &data[0..data_size]);
 
@@ -147,7 +146,8 @@ fn write_vector(connection: posix.socket_t, data_vector: []posix.iovec_const) !v
             x -= data_vector[i].len;
 
             i += 1;
-            if (i > data_vector.len) return;
+            if (i > data_vector.len)
+                return;
         }
         data_vector[i].base += x;
         data_vector[i].len -= x;
@@ -159,9 +159,8 @@ fn read(connection: posix.socket_t, data: []const u8) !void {
     while (total_bytes_read < data.len) {
         const bytes_read = try posix.read(connection, &data[total_bytes_read..]);
 
-        if (bytes_read == 0) {
-            return error.Closed;
-        }
+        if (bytes_read == 0)
+            return error.ConnectionClosed;
 
         total_bytes_read += bytes_read;
     }
