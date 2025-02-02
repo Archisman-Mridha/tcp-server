@@ -35,11 +35,11 @@ pub const ConnectionReader = struct {
             return null;
         }
         const next_message_data_size =
-            std.mem.readInt(u32, &partial_next_message[0..MESSAGE_HEADER_LEN], .little);
+            std.mem.readInt(u32, partial_next_message[0..MESSAGE_HEADER_LEN], .little);
 
         const next_message_size = MESSAGE_HEADER_LEN + next_message_data_size;
-        if (partial_next_message < next_message_size) {
-            self.ensure_next_message_buffer_size(next_message_size);
+        if (partial_next_message.len < next_message_size) {
+            try self.ensure_next_message_buffer_size(next_message_size);
             return null;
         }
 
@@ -61,7 +61,7 @@ pub const ConnectionReader = struct {
         if (partial_next_message_size >= size)
             return;
 
-        const partial_next_message = self.buffer[self.next_message_starts_at - self.total_bytes_read];
+        const partial_next_message = self.buffer[self.next_message_starts_at..self.total_bytes_read];
 
         // The previous message (already read by the user when self.read_message( ) was invoke
         // previously) is still present in the buffer.
