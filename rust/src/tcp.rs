@@ -27,29 +27,37 @@ pub enum TCPConnectionState {
 }
 
 /*
-  Sequence Numbers :
+  (1) Sequence Numbers :
 
-  Every octet of data sent over a TCP connection has a sequence number. Since every octet is
-  sequenced, each of them can be acknowledged. The acknowledgment mechanism employed is cumulative
-  so that an acknowledgment of sequence number X indicates that all octets up to but not including
-  X have been received. This mechanism allows for straight-forward duplicate detection in the
-  presence of retransmission. Numbering of octets within a segment is that the first data octet
-  immediately following the header is the lowest numbered, and the following octets are numbered
-  consecutively.
+    Every octet of data sent over a TCP connection has a sequence number. Since every octet is
+    sequenced, each of them can be acknowledged. The acknowledgment mechanism employed is
+    cumulative so that an acknowledgment of sequence number X indicates that all octets up to but
+    not including X have been received. This mechanism allows for straight-forward duplicate
+    detection in the presence of retransmission. Numbering of octets within a segment is that the
+    first data octet immediately following the header is the lowest numbered, and the following
+    octets are numbered consecutively.
 
-  It is essential to remember that the actual sequence number space is finite, though very large.
-  This space ranges from 0 to (2**32 - 1).
-*/
+    It is essential to remember that the actual sequence number space is finite, though very large.
+    This space ranges from 0 to (2**32 - 1).
 
-/*
-  The maintenance of a TCP connection requires the remembering of several variables. We conceive
-  of these variables being stored in a connection record called a Transmission Control Block (TCB).
+  (2) Window :
 */
 
 struct ReceiveSequenceVariables {
+  // Represents the sequence number of the next byte that the receiver expects to receive.
+  // It ensures the receiver processes the incoming data in the correct order. If an out-of-order
+  // segment is received, it will not be acknowledged, and the receiver will wait for the segment
+  // matching this value.
   nxt: usize,
+
+  // Indicates how much buffer space is available for incoming data at the receiver.
   wnd: usize,
+
+  // Tracks the sequence number offset of urgent data in the receive buffer.
   up: usize,
+
+  // The sequence number chosen during the initial handshake as the starting point for the receive
+  // side.
   irs: usize,
 }
 
@@ -64,6 +72,10 @@ struct SendSequenceVariables {
 }
 
 // Represents the TCB.
+/*
+  The maintenance of a TCP connection requires the remembering of several variables. We conceive
+  of these variables being stored in a connection record called a Transmission Control Block (TCB).
+*/
 pub struct TCPConnection {
   state: TCPConnectionState,
 
