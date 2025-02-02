@@ -2,6 +2,9 @@ const std = @import("std");
 const net = std.net;
 const posix = std.posix;
 
+// The message header contains the byte length of the message data.
+const MESSAGE_HEADER_LEN = 4;
+
 pub fn main() !void {
     const address = try net.Address.parseIp("127.0.0.1", 4000);
 
@@ -84,34 +87,41 @@ pub fn main() !void {
     }
 }
 
-fn write_message(connection: posix.socket_t, message: []const u8) !void {
-    var message_prefix: [4]u8 = undefined;
-    std.mem.writeInt(u32, &message_prefix, @intCast(message.len), .little);
-    try write(connection, &message_prefix);
+fn write_message(connection: posix.socket_t, data: []const u8) !void {
+    var message_header: [MESSAGE_HEADER_LEN]u8 = undefined;
+    std.mem.writeInt(u32, &message_header, @intCast(data.len), .little);
 
-    try write(connection, &message);
+    var vector = [2]posix.iovec_const{
+        .{ .len = MESSAGE_HEADER_LEN, .base = &message_header },
+        .{ .len = data.len, .base = &data },
+    };
+
+    try write_vector(connection, &vector);
 }
 
-fn read_message(connection: posix.socket_t, message: []const u8) !u32 {
-    var message_prefix: [4]u8 = undefined;
-    try read(connection, &message_prefix);
+fn read_message(connection: posix.socket_t, data: []const u8) !u32 {
+    var message_header: [4]u8 = undefined;
+    try read(connection, &message_header);
 
-    // Determine the message length.
-    const message_size = std.mem.readInt(u32, &message_prefix, .little);
-    if (message_size > message.len) {
+    const data_size = std.mem.readInt(u32, &message_header, .little);
+    if (data_size > data.len) {
         return error.BufferTooSmall;
     }
 
-    try read(connection, &message[0..message_size]);
+    try read(connection, &data[0..data_size]);
 
-    return message_size;
+    return data_size;
 }
 
-fn write(connection: posix.socket_t, message: []const u8) !void {
-    var total_bytes_written: usize = 0;
-    while (total_bytes_written < message.len) {
+fn write_vector(connection: posix.socket_t, data_vector: []posix.iovec_const) !void {
+    var i: usize = 0;
+    while (true) {
         // Writes to the connection file descriptor. Retries when interrupted by a signal.
         // Returns the number of bytes written.
+        //
+        // Since syscalls have overhead, and this is a critical path, we use writev (port of the
+        // vectored I/O) instead of write, trying to do the job using the least possible number of
+        // syscalls.
         //
         // NOTE : a successful write() may transfer fewer than count bytes.  Such partial  writes
         // can occur  for  various reasons. For example :
@@ -130,20 +140,24 @@ fn write(connection: posix.socket_t, message: []const u8) !void {
         // Also, Linux has a limit on how many bytes may be transferred in one write() call, which
         // is 0x7ffff000 on both 64-bit and 32-bit systems. This is due to using a signed C int as
         // the return value, as well as stuffing the errno codes into the last 4096 values.
-        const bytes_written = try posix.write(connection, message);
+        const bytes_written = try posix.writev(connection, data_vector[i..]);
 
-        if (bytes_written == 0) {
-            return error.Closed;
+        var x = bytes_written;
+        while (x >= data_vector[i].len) {
+            x -= data_vector[i].len;
+
+            i += 1;
+            if (i > data_vector.len) return;
         }
-
-        total_bytes_written += bytes_written;
+        data_vector[i].base += x;
+        data_vector[i].len -= x;
     }
 }
 
-fn read(connection: posix.socket_t, message: []const u8) !void {
+fn read(connection: posix.socket_t, data: []const u8) !void {
     var total_bytes_read: u32 = 0;
-    while (total_bytes_read < message.len) {
-        const bytes_read = try posix.read(connection, &message[total_bytes_read..]);
+    while (total_bytes_read < data.len) {
+        const bytes_read = try posix.read(connection, &data[total_bytes_read..]);
 
         if (bytes_read == 0) {
             return error.Closed;

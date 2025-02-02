@@ -8,6 +8,8 @@
 
 - Some protocols use **both delimiters and some type of prefix**. HTTP, for example, uses delimiters for its headers, but the body's length is typically defined by the text-encoded Content-Length header. Redis also stands out as having a mix of both delimiters (for ease of human-readability) and text-encoded length prefix.
 
+- Elixir and Erlang have strong support for **vectored I/O**.
+
 ## REFERENCEs
 
 - [TUN/TAP](https://en.wikipedia.org/wiki/TUN/TAP)
