@@ -11,7 +11,16 @@ pub const Client = struct {
     connection: posix.socket_t,
     address: net.Address,
 
-    pub fn handle(self: Self) !void {
+    pub fn handle(self: Self) void {
+        Self._handle(&self) catch |err| {
+            switch (err) {
+                error.ConnectionClosed => {},
+                else => std.debug.print("[{any}] Failed handling client : {}\n", .{ self.address, err }),
+            }
+        };
+    }
+
+    fn _handle(self: *const Self) !void {
         defer posix.close(self.connection);
 
         // posix.read( ) will block until the client sends something. Even if the client
