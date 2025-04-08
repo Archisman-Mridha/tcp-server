@@ -5,7 +5,7 @@ const ConnectionReader = @import("./reader.zig").ConnectionReader;
 
 const CONNECTION_READ_TIMEOUT = posix.timeval{ .tv_sec = 2, .tv_usec = 500_000 };
 
-pub const Client = struct {
+pub const MultiThreadedServerClient = struct {
     const Self = @This();
 
     connection: posix.socket_t,
@@ -56,4 +56,10 @@ pub const Client = struct {
             std.debug.print("Received message. Here is the message data : {any}\n", .{message_data});
         }
     }
+};
+
+pub const SingleThreadedServerClient = struct {
+    const Self = @This();
+
+    pub fn init(allocator: std.mem.Allocator, address: net.Address, connection: posix.socket_t) !Self {}
 };

@@ -13,9 +13,11 @@
 ## REFERENCEs
 
 - [TUN/TAP](https://en.wikipedia.org/wiki/TUN/TAP)
-- [TRANSMISSION CONTROL PROTOCOL](https://www.ietf.org/rfc/rfc793.txt)
+- [TRANSMISSION CONTROL PROTOCOL](https://datatracker.ietf.org/doc/html/rfc9293)
 - [INTERNET PROTOCOL](https://datatracker.ietf.org/doc/html/rfc791)
 - [Datagrams](https://en.wikipedia.org/wiki/Datagram)
 - [SYN flood attack](https://www.cloudflare.com/en-in/learning/ddos/syn-flood-ddos-attack/)
+
+- [What is the difference between a slice and an array in Rust?](https://stackoverflow.com/a/30794371/20891099)
 
 - [TCP Server in Zig - Part 1 - Single Threaded](https://www.openmymind.net/TCP-Server-In-Zig-Part-1-Single-Threaded/)

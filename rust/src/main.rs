@@ -10,16 +10,18 @@ fn main() -> anyhow::Result<()> {
   /*
     TUN and TAP are kernel virtual network devices.
 
-    TUN, namely network TUNnel, simulates a network layer device and operates in layer 3 carrying
-    IP packets. TUN is used with routing.
+    TUN, namely network TUNnel (acts like a virtual Network Interface Card), simulates a network
+    layer device and operates in layer 3 carrying IP packets. TUN is used with routing.
 
-    TAP, namely network TAP, simulates a link layer device and operates in layer 2 carrying Ethernet
-    frames. TAP can be used to create a user space network bridge.
+    TAP, namely network TAP (acts like a virtual Ethernet cable), simulates a link layer device and
+    operates in layer 2 carrying Ethernet frames. TAP can be used to create a user space network
+    bridge.
 
-    Packets sent by an operating system via a TUN/TAP device are delivered to a user space program
-    which attaches itself to the device. A user space program may also pass packets into a TUN/TAP
-    device. In this case the TUN/TAP device delivers (or injects) these packets to the
-    operating-system network stack thus emulating their reception from an external source.
+    Packets sent by an operating system via a TUN/TAP device, are delivered to a user space program
+    which attaches itself to the device.
+    A user space program may also pass packets into a TUN/TAP device. In this case the TUN/TAP
+    device delivers (or injects) these packets to the operating-system network stack thus emulating
+    their reception from an external source.
 
     REFERENCE : https://en.wikipedia.org/wiki/TUN/TAP
   */
@@ -28,6 +30,10 @@ fn main() -> anyhow::Result<()> {
   vNICConfig
     .tun_name("utun4")
     .address("10.0.0.1")
+    /*
+      Range of IPs that are considered "directly reachable" via this interface. This tells your
+      OS : if you're sending a packet to anything in 10.0.0.0/24, route it through utun4.
+    */
     .netmask((255, 255, 255, 0))
     .destination("10.0.0.255")
     .up();
@@ -117,7 +123,7 @@ fn main() -> anyhow::Result<()> {
 
       // Connection exists.
       // Process the packet.
-      Entry::Occupied(mut existingConnection) => todo!(),
+      Entry::Occupied(mut existingConnection) => unimplemented!(),
     }
   }
 }

@@ -41,6 +41,25 @@ pub enum TCPConnectionState {
     This space ranges from 0 to (2**32 - 1).
 
   (2) Window :
+
+    The window sent in each segment indicates the range of sequence numbers the sender of the
+    window (the data receiver) is currently prepared to accept. There is an assumption that this is
+    related to the currently available data buffer space available for this connection.
+
+    Indicating a large window encourages transmissions. If more data arrives than can be accepted,
+    it will be discarded. This will result in excessive retransmissions, adding unnecessarily to
+    the load on the network and the TCPs. Indicating a small window may restrict the transmission
+    of data to the point of introducing a round trip delay between each new segment transmitted.
+
+    The sending TCP must be prepared to accept from the user and send at least one octet of new
+    data even if the send window is zero. The sending TCP must regularly retransmit to the
+    receiving TCP even when the window is zero. Two minutes is recommended for the retransmission
+    interval when the window is zero. This retransmission is essential to guarantee that when
+    either TCP has a zero window the re-opening of the window will be reliably reported to the
+    other.
+
+    When the receiving TCP has a zero window and a segment arrives it must still send an
+    acknowledgment showing its next expected sequence number and current window (zero).
 */
 
 struct ReceiveSequenceVariables {
@@ -48,33 +67,46 @@ struct ReceiveSequenceVariables {
   // It ensures the receiver processes the incoming data in the correct order. If an out-of-order
   // segment is received, it will not be acknowledged, and the receiver will wait for the segment
   // matching this value.
-  nxt: usize,
+  nextByteSequenceNumber: u32, // nxt.
 
   // Indicates how much buffer space is available for incoming data at the receiver.
-  wnd: usize,
+  windowSize: u16, // wnd.
 
   // Tracks the sequence number offset of urgent data in the receive buffer.
-  up: usize,
+  up: bool, // up.
 
   // The sequence number chosen during the initial handshake as the starting point for the receive
   // side.
-  irs: usize,
+  initialReceiveSequenceNumber: u32, // irs.
 }
 
 struct SendSequenceVariables {
-  una: usize,
-  nxt: usize,
-  wnd: usize,
-  up: usize,
-  wl1: usize,
-  wl2: usize,
-  iss: usize,
+  // Oldest unacknowledged sequence number.
+  oldestUnacknowledgedSequenceNumber: u32, // una.
+
+  // Next sequence number to be sent.
+  nextSequenceNumber: u32, // nxt.
+
+  // Send window.
+  windowSize: u16, // wnd.
+
+  // Send urgent pointer.
+  up: bool,
+
+  // Segment sequence number used for last window update.
+  lastWindowUpdateSegmentSequenceNumber: u32, // wl1.
+
+  // Segment acknowledgment number used for last window update.
+  lastWindowUpdateAcknowledgementNumber: u32, // wl2.
+
+  // Initial send sequence number.
+  initialSendSequenceNumber: u32, // iss.
 }
 
 // Represents the TCB.
 /*
-  The maintenance of a TCP connection requires the remembering of several variables. We conceive
-  of these variables being stored in a connection record called a Transmission Control Block (TCB).
+  The maintenance of a TCP connection requires remembering several variables. We conceive of these
+  variables being stored in a connection record called a Transmission Control Block (TCB).
 */
 pub struct TCPConnection {
   state: TCPConnectionState,
@@ -87,22 +119,22 @@ pub struct TCPConnection {
   Initial Sequence Number (ISN) selection and the three way handshake :
 
   The protocol places no restriction on a particular connection being used over and over again. A
-  connection is defined by a pair of sockets.
+  connection is defined by a pair of sockets. New instances of a connection will be referred to as
+  incarnations of the connection.
 
-  New instances of a connection will be referred to as incarnations of the connection. The problem
-  that arises from this is : how does the TCP identify duplicate segments from previous
+  The problem that arises from this is : how does the TCP identify duplicate segments from previous
   incarnations of the connection? This problem becomes apparent if the connection is being opened
   and closed in quick succession / if the connection breaks with loss of memory and is then
   re-established.
 
-  To avoid confusion we must prevent segments from one incarnation of a connection from being used
+  To avoid confusion we must prevent segments from one incarnation of a connection from being used,
   while the same sequence numbers may still be present in the network from an earlier incarnation.
   We want to assure this, even if a TCP crashes and loses all knowledge of the sequence numbers it
   has been using.
 
   When new connections are created, an initial sequence number (ISN) generator is employed which
   selects a new 32 bit ISN.  The generator is bound to a (possibly fictitious) 32 bit clock whose
-  low order bit is incremented roughly every 4 microseconds.  Thus, the ISN cycles approximately
+  low order bit is incremented roughly every 4 microseconds. Thus, the ISN cycles approximately
   every 4.55 hours. Since we assume that segments will stay in the network no more than the
   Maximum Segment Lifetime (MSL) and that the MSL is less than 4.55 hours we can reasonably assume
   that ISN's will be unique.
@@ -149,23 +181,32 @@ impl TCPConnection {
     // We've received a SYN packet from the client.
     // Start establishing a connection, by sending back a SYN ACK packet.
 
+    let initialSendSequenceNumber = 0;
+    let sendWindowSize = 1024;
+
     let mut connection = Self {
       state: TCPConnectionState::SYNReceived,
 
-      receiveSequenceVariables: ReceiveSequenceVariables {},
+      receiveSequenceVariables: ReceiveSequenceVariables {
+        initialReceiveSequenceNumber: incomingPacketTCPHeader.sequence_number(),
+        nextByteSequenceNumber: incomingPacketTCPHeader.sequence_number() + 1,
+        windowSize: incomingPacketTCPHeader.window_size(),
+        up: false,
+      },
 
       sendSequenceVariables: SendSequenceVariables {
-        una: (),
-        nxt: (),
-        ack: (),
-        seq: (),
-        len: (),
+        initialSendSequenceNumber,
+        oldestUnacknowledgedSequenceNumber: initialSendSequenceNumber,
+        nextSequenceNumber: initialSendSequenceNumber,
+        windowSize: sendWindowSize,
+        up: false,
+        lastWindowUpdateSegmentSequenceNumber: initialSendSequenceNumber,
+        lastWindowUpdateAcknowledgementNumber: initialSendSequenceNumber,
       },
     };
 
-    let mut buffer = [0u8; 1024];
-    let mut buffer = &mut buffer[..]; // Convertion from fixed-size array to slice.
-
+    // You can view the TCP header format here :
+    // https://datatracker.ietf.org/doc/html/rfc9293#section-3.1
     let mut synAckPacketTCPHeader = TcpHeader::new(
       incomingPacketTCPHeader.destination_port(),
       incomingPacketTCPHeader.source_port(),
@@ -176,6 +217,8 @@ impl TCPConnection {
     synAckPacketTCPHeader.ack = true;
     synAckPacketTCPHeader.syn = true;
 
+    // You can view the IPv4 header format here :
+    // https://datatracker.ietf.org/doc/html/rfc791#section-3.1.
     let synAckPacketIPv4Header = Ipv4Header::new(
       synAckPacketTCPHeader.to_bytes().len() as u16,
       64,
@@ -184,10 +227,20 @@ impl TCPConnection {
       incomingPacketIPv4Header.source(),
     )?;
 
-    synAckPacketIPv4Header.write(&mut buffer)?;
-    synAckPacketTCPHeader.write(&mut buffer)?;
+    let mut arrayBuffer = [0u8; 1024];
 
-    nic.send(&buffer[..buffer.len()])?;
+    let arrayBufferEmptyPortionLength = {
+      let mut sliceBuffer = &mut arrayBuffer[..]; // Convertion from fixed-size array to slice.
+
+      synAckPacketIPv4Header.write(&mut sliceBuffer)?;
+      synAckPacketTCPHeader.write(&mut sliceBuffer)?;
+
+      sliceBuffer.len()
+    };
+
+    let arrayBufferUsedPortionLength = arrayBuffer.len() - arrayBufferEmptyPortionLength;
+
+    nic.send(&arrayBuffer[..arrayBufferUsedPortionLength])?;
 
     Ok(connection)
   }
