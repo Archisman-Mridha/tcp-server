@@ -1,8 +1,10 @@
 #![allow(non_snake_case)]
 
-use etherparse::IpNumber;
-use std::collections::hash_map::{Entry, HashMap};
-use tcp::{ConnectionQuad, Location, TCPConnection};
+use {
+  etherparse::IpNumber,
+  std::collections::hash_map::{Entry, HashMap},
+  tcp::{ConnectionQuad, Location, TCPConnection},
+};
 
 mod tcp;
 

@@ -1,6 +1,8 @@
-use anyhow::anyhow;
-use etherparse::{IpNumber, Ipv4Header, Ipv4HeaderSlice, TcpHeader, TcpHeaderSlice};
-use std::net::Ipv4Addr;
+use {
+  anyhow::anyhow,
+  etherparse::{IpNumber, Ipv4Header, Ipv4HeaderSlice, TcpHeader, TcpHeaderSlice},
+  std::net::Ipv4Addr,
+};
 
 #[derive(PartialEq, Eq, Hash)]
 pub struct Location {
